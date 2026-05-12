@@ -41,6 +41,9 @@ pub trait DynamicBuilder {
     /// Returns `Ok(())` on success, or `Err(VcfError)` if the value could not be parsed.
     fn append_from_str(&mut self, value: &str) -> Result<(), VcfError>;
 
+    /// Appends a null value to the array.
+    fn append_null(&mut self);
+
     /// Finalizes the builder and returns the constructed Arrow array.
     ///
     /// # Returns
@@ -53,6 +56,10 @@ impl DynamicBuilder for StringBuilder {
     fn append_from_str(&mut self, value: &str) -> Result<(), VcfError> {
         self.append_value(value);
         Ok(())
+    }
+
+    fn append_null(&mut self) {
+        self.append_null();
     }
 
     fn build(&mut self) -> Result<ArrayRef, VcfError> {
@@ -74,6 +81,10 @@ impl DynamicBuilder for Float32Builder {
         Ok(())
     }
 
+    fn append_null(&mut self) {
+        self.append_null();
+    }
+
     fn build(&mut self) -> Result<ArrayRef, VcfError> {
         Ok(std::sync::Arc::new(self.finish()))
     }
@@ -85,6 +96,10 @@ impl DynamicBuilder for Int32Builder {
             VcfError::ParseVcfError(format!("Cannot convert '{}' into int32, {}", value, err))
         })?);
         Ok(())
+    }
+
+    fn append_null(&mut self) {
+        self.append_null();
     }
 
     fn build(&mut self) -> Result<ArrayRef, VcfError> {

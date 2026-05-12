@@ -32,9 +32,9 @@ use arrow::array::{Int64Builder, StringBuilder};
 use bytes::Bytes;
 use flate2::read::GzDecoder;
 
-use crate::error::VcfError;
-use super::builders::{build_samples, VcfSampleFrameBuilder};
+use super::builders::{VcfSampleFrameBuilder, build_samples};
 use super::types::{Contig, FormatDef, VcfMeta, VcfParseResult};
+use crate::error::VcfError;
 
 /// Core component for converting VCF data into Apache Arrow format.
 ///
@@ -203,8 +203,7 @@ impl VcfReader {
                     meta.formats.push(f.clone());
                     sample_builder.add_sample_builder(f)?;
                 }
-                if let Some(_info) = line.strip_prefix("##INFO=") {
-                }
+                if let Some(_info) = line.strip_prefix("##INFO=") {}
             } else if line.starts_with("#") {
                 let cols: Vec<&str> = line.split('\t').collect();
                 for col in cols.iter().skip(9) {
@@ -264,6 +263,12 @@ impl VcfReader {
                                     )))?;
 
                                 builder.arrow_builder.append_from_str(r)?;
+                            }
+
+                            for (index, builder) in sample_builder.builder_map.iter_mut() {
+                                if !format_data.contains(&index.as_str()) {
+                                    builder.arrow_builder.append_null();
+                                }
                             }
                         }
                         _ => break,
