@@ -1,6 +1,6 @@
 [package]
 name = "vcf-arrow"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2024"
 author = "Wjixiang"
 description = "A VCF data parser using Appache Arrow as standard format"
@@ -9,6 +9,6 @@ repository = "https://github.com/wjixiang/VCF-Arrow"
 
 [dependencies]
 flate2 = "1.1.9"
-arrow = "58.3.0"
+arrow = "57.3.0"
 thiserror = "2.0.18"
 bytes = "1.11.1"

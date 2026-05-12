@@ -30,7 +30,7 @@ use std::sync::Arc;
 
 use arrow::array::{Int64Builder, StringBuilder};
 use bytes::Bytes;
-use flate2::read::GzDecoder;
+use flate2::read::MultiGzDecoder;
 
 use super::builders::{VcfSampleFrameBuilder, build_samples};
 use super::types::{Contig, FormatDef, VcfMeta, VcfParseResult};
@@ -80,7 +80,7 @@ impl VcfReader {
     pub fn convert_from_gz(path: &str) -> Result<Self, VcfError> {
         let f = File::open(path)?;
         let buffer = BufReader::new(f);
-        let mut gz = GzDecoder::new(buffer);
+        let mut gz = MultiGzDecoder::new(buffer);
         let mut content = String::new();
         gz.read_to_string(&mut content)?;
 
@@ -114,7 +114,7 @@ impl VcfReader {
     /// ```
     pub fn convert_from_gz_bytes(bytes: Bytes) -> Result<Self, VcfError> {
         let cursor = Cursor::new(bytes);
-        let mut gz = GzDecoder::new(cursor);
+        let mut gz = MultiGzDecoder::new(cursor);
         let mut content = String::new();
         gz.read_to_string(&mut content)?;
 
@@ -299,6 +299,7 @@ mod test {
     use super::*;
 
     static PATH: &str = "./tests/test.vcf.gz";
+    static LARGE_PATH: &str = "/mnt/disk2/dataset/mr/ukb-e-K80_CSA/ukb-e-K80_CSA.vcf.gz";
 
     fn get_reader() -> VcfReader {
         VcfReader::convert_from_gz(PATH).unwrap()
@@ -317,5 +318,79 @@ mod test {
         let res = reader.parse_into_arrow().unwrap();
         assert!(res._ref.as_ref().len() > 0);
         dbg!(res);
+    }
+
+    #[test]
+    fn test_large_vcf_line_count() {
+        let reader = VcfReader::convert_from_gz(LARGE_PATH).unwrap();
+        let total_lines = reader.str_content.lines().count();
+        let data_lines = reader
+            .str_content
+            .lines()
+            .filter(|l| !l.starts_with('#'))
+            .count();
+        let header_meta_lines = reader
+            .str_content
+            .lines()
+            .filter(|l| l.starts_with("##"))
+            .count();
+        let header_col_line = reader
+            .str_content
+            .lines()
+            .filter(|l| l.starts_with('#') && !l.starts_with("##"))
+            .count();
+        println!("total_lines: {}", total_lines);
+        println!("header_meta_lines (##): {}", header_meta_lines);
+        println!("header_col_line (#CHROM): {}", header_col_line);
+        println!("data_lines: {}", data_lines);
+        println!("sum: {}", header_meta_lines + header_col_line + data_lines);
+        assert_eq!(data_lines, 9_755_543, "data line count mismatch");
+    }
+
+    #[test]
+    fn test_large_vcf_parse_into_arrow() {
+        let reader = VcfReader::convert_from_gz(LARGE_PATH).unwrap();
+        let res = reader.parse_into_arrow().unwrap();
+        assert_eq!(res.chrom.len(), 9_755_543);
+        assert_eq!(res.pos.len(), 9_755_543);
+        assert_eq!(res._ref.len(), 9_755_543);
+        assert_eq!(res.meta.samples.len(), 1);
+        assert_eq!(res.meta.formats.len(), 9);
+        for (_, arr) in &res.samples {
+            assert_eq!(arr.len(), 9_755_543);
+        }
+    }
+
+    #[test]
+    fn test_large_vcf_parse_consistency() {
+        let reader = VcfReader::convert_from_gz(LARGE_PATH).unwrap();
+        let raw_data_lines: Vec<&str> = reader
+            .str_content
+            .lines()
+            .filter(|l| !l.starts_with('#'))
+            .collect();
+        let res = reader.parse_into_arrow().unwrap();
+
+        let raw_count = raw_data_lines.len();
+        let parsed_count = res.chrom.len();
+        println!("raw data lines: {}", raw_count);
+        println!("parsed chrom.len: {}", parsed_count);
+
+        assert_eq!(raw_count, parsed_count, "raw data lines != parsed chrom.len");
+
+        let chrom = res.chrom.as_any().downcast_ref::<arrow::array::StringArray>().unwrap();
+        let pos = res.pos.as_any().downcast_ref::<arrow::array::Int64Array>().unwrap();
+        let id = res.id.as_any().downcast_ref::<arrow::array::StringArray>().unwrap();
+        let refr = res._ref.as_any().downcast_ref::<arrow::array::StringArray>().unwrap();
+        let alt = res.alt.as_any().downcast_ref::<arrow::array::StringArray>().unwrap();
+
+        for (i, line) in raw_data_lines.iter().enumerate() {
+            let cols: Vec<&str> = line.split('\t').collect();
+            assert_eq!(chrom.value(i), cols[0], "chrom mismatch at line {}", i);
+            assert_eq!(pos.value(i), cols[1].parse::<i64>().unwrap(), "pos mismatch at line {}", i);
+            assert_eq!(id.value(i), cols[2], "id mismatch at line {}", i);
+            assert_eq!(refr.value(i), cols[3], "ref mismatch at line {}", i);
+            assert_eq!(alt.value(i), cols[4], "alt mismatch at line {}", i);
+        }
     }
 }
