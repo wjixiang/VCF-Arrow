@@ -11,11 +11,24 @@ A high-performance VCF (Variant Call Format) parser built with Rust and Apache A
 
 ## Supported Types
 
-| VCF Type   | Arrow Type |
-|------------|------------|
-| `Integer`  | `Int32Array`   |
-| `Float`    | `Float32Array` |
-| `String`   | `StringArray`  |
+### Data Types
+
+| VCF Type  | Arrow Type     |
+| --------- | -------------- |
+| `Integer` | `Int32Array`   |
+| `Float`   | `Float32Array` |
+| `String`  | `StringArray`  |
+
+### Meta-information
+
+- [x] Contig
+- [x] Filter field format
+- [x] Sample field format
+- [] File format
+- [] Information field format
+- [] Alternative allele field format
+- [] Assembly field format
+- [] Pedigree field format
 
 ## Usage
 
@@ -23,7 +36,7 @@ Add `vcf-arrow` to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-vcf-arrow = "0.1.0"
+vcf-arrow = "0.1.2"
 ```
 
 ### Parse a `.vcf.gz` file
@@ -51,12 +64,12 @@ let result = reader.parse_into_arrow()?;
 
 ## Core Structs
 
-| Struct | Description |
-|--------|-------------|
-| `VcfReader` | Entry point for loading and parsing VCF files |
+| Struct           | Description                                                                                                                                              |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `VcfReader`      | Entry point for loading and parsing VCF files                                                                                                            |
 | `VcfParseResult` | Parsed result containing metadata (`VcfMeta`), fixed columns (`chrom`, `pos`, `id`, `alt`, `qual`, `filter`, `info`), and sample data (`Vec<VcfSample>`) |
-| `VcfMeta` | Parsed metadata: contigs, FORMAT definitions, INFO definitions, and sample names |
-| `VcfSample` | A single sample field with its `FormatDef` and the corresponding Arrow `ArrayRef` |
+| `VcfMeta`        | Parsed metadata: contigs, FORMAT definitions, INFO definitions, and sample names                                                                         |
+| `VcfSample`      | A single sample field with its `FormatDef` and the corresponding Arrow `ArrayRef`                                                                        |
 
 ## Reference
 

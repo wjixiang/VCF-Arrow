@@ -1,6 +1,6 @@
 [package]
 name = "vcf-arrow"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 author = "Wjixiang"
 description = "A VCF data parser using Appache Arrow as standard format"
