@@ -1,7 +1,67 @@
 # VCF-Arrow
 
-A VCF parsing tool based on Rust and Apache Arrow, leveraging modern data analysis ecosystems for bioinformatics processing.
+A high-performance VCF (Variant Call Format) parser built with Rust and Apache Arrow, designed for modern bioinformatics data analysis pipelines.
 
-- **Complete Raw Data Parsing**: Fully parses metadata and data body, improving parsing speed without losing information
-- **Automatic Schema Conversion**: Automatically generates Arrow Schema for sample data combined with Format data, resulting in highly structured data compared to raw VCF, reducing data cleaning overhead
-- **Arrow Ecosystem Integration**: All data is uniformly converted to Arrow's ArrayRef, enabling flexible integration with multiple analysis frameworks for downstream analysis without additional serialization/deserialization
+## Features
+
+- **Complete Raw Data Parsing** — Fully parses VCF metadata (contigs, FORMAT, INFO) and data body with zero information loss
+- **Automatic Schema Conversion** — Automatically generates typed Arrow arrays for sample data based on FORMAT definitions, producing highly structured output that reduces downstream data cleaning overhead
+- **Arrow Ecosystem Integration** — All data is converted to Arrow `ArrayRef`, enabling seamless integration with Arrow-compatible analysis frameworks (e.g., Polars, DataFusion, PyArrow) without additional serialization/deserialization
+- **gzip Support** — Native `.vcf.gz` decompression via `flate2`
+
+## Supported Types
+
+| VCF Type   | Arrow Type |
+|------------|------------|
+| `Integer`  | `Int32Array`   |
+| `Float`    | `Float32Array` |
+| `String`   | `StringArray`  |
+
+## Usage
+
+Add `vcf-arrow` to your `Cargo.toml`:
+
+```toml
+[dependencies]
+vcf-arrow = "0.1.0"
+```
+
+### Parse a `.vcf.gz` file
+
+```rust
+use vcf_arrow::vcf::VcfReader;
+
+let reader = VcfReader::load_gz("sample.vcf.gz")?;
+let result = reader.parse_into_arrow()?;
+
+println!("Samples: {:?}", result.meta.samples);
+println!("CHROM:  {:?}", result.chrom);
+println!("POS:    {:?}", result.pos);
+println!("Sample data: {:?}", result.samples);
+```
+
+### Parse from a string
+
+```rust
+use vcf_arrow::vcf::VcfReader;
+
+let reader = VcfReader::convert_from_str(include_str!("sample.vcf"))?;
+let result = reader.parse_into_arrow()?;
+```
+
+## Core Structs
+
+| Struct | Description |
+|--------|-------------|
+| `VcfReader` | Entry point for loading and parsing VCF files |
+| `VcfParseResult` | Parsed result containing metadata (`VcfMeta`), fixed columns (`chrom`, `pos`, `id`, `alt`, `qual`, `filter`, `info`), and sample data (`Vec<VcfSample>`) |
+| `VcfMeta` | Parsed metadata: contigs, FORMAT definitions, INFO definitions, and sample names |
+| `VcfSample` | A single sample field with its `FormatDef` and the corresponding Arrow `ArrayRef` |
+
+## Reference
+
+This library follows the [VCF Version 4.2 Specification](https://samtools.github.io/hts-specs/VCFv4.2.pdf).
+
+## License
+
+Licensed under either of [MIT](https://opensource.org/licenses/MIT) or [Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0) at your option.

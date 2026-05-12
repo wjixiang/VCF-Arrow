@@ -2,11 +2,12 @@
 //! This module use [ Variant Vall Format(VCF) Version 4.2 Specification ](https://samtools.github.io/hts-specs/VCFv4.2.pdf) as standard reference
 
 use std::collections::HashMap;
-use std::io::Read;
+use std::io::{Cursor, Read};
 use std::sync::Arc;
 use std::{fs::File, io::BufReader};
 
 use arrow::array::{ArrayRef, Float32Builder, Int32Builder, Int64Builder, StringBuilder};
+use bytes::Bytes;
 use flate2::read::GzDecoder;
 
 use crate::error::VcfError;
@@ -213,12 +214,24 @@ pub struct VcfParseResult {
 }
 
 impl VcfReader {
-    pub fn load_gz(path: &str) -> Result<Self, VcfError> {
+    pub fn convert_from_gz(path: &str) -> Result<Self, VcfError> {
         let f = File::open(path)?;
         let buffer = BufReader::new(f);
         let mut gz = GzDecoder::new(buffer);
         let mut content = String::new();
         gz.read_to_string(&mut content)?;
+
+        Ok(Self {
+            str_content: content,
+        })
+    }
+
+    pub fn convert_from_gz_bytes(bytes: Bytes) -> Result<Self, VcfError> {
+        let cursor = Cursor::new(bytes);
+        let mut gz = GzDecoder::new(cursor);
+        let mut content = String::new();
+        gz.read_to_string(&mut content)?;
+
         Ok(Self {
             str_content: content,
         })
@@ -355,7 +368,7 @@ mod test {
     static PATH: &str = "./tests/test.vcf.gz";
 
     fn get_reader() -> VcfReader {
-        VcfReader::load_gz(PATH).unwrap()
+        VcfReader::convert_from_gz(PATH).unwrap()
     }
 
     #[test]
