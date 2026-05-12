@@ -90,7 +90,7 @@ pub struct VcfSample {
 pub struct VcfParseResult {
     pub meta: VcfMeta,
 
-    /// CHROM - chromosome: An identifier from the reference genome or an angle-bracketed ID String ("<ID>")
+    /// CHROM - chromosome: An identifier from the reference genome or an angle-bracketed ID String ("\<ID\>")
     /// pointing to a contig in the assembly file (cf. the ##assembly line in the header). All entries for a specific
     /// CHROM should form a contiguous block within the VCF file.
     ///
@@ -116,14 +116,14 @@ pub struct VcfParseResult {
     /// occurs at position 1 on the contig in which case it must include the base after the event; this padding base is
     /// not required (although it is permitted) for e.g. complex substitutions or other events where all alleles have at
     /// least one base represented in their Strings. If any of the ALT alleles is a symbolic allele (an angle-bracketed
-    /// ID String "<ID>") then the padding base is required and POS denotes the coordinate of the base preceding
+    /// ID String ("\<ID\>") then the padding base is required and POS denotes the coordinate of the base preceding
     /// the polymorphism. Tools processing VCF files are not required to preserve case in the allele Strings. (String,
     /// Required).
     pub _ref: ArrayRef,
 
     /// ALT - alternate base(s): Comma separated list of alternate non-reference alleles. These alleles do not have to
     /// be called in any of the samples. Options are base Strings made up of the bases A,C,G,T,N,*, (case insensitive)
-    /// or an angle-bracketed ID String ("<ID>") or a breakend replacement string as described in the section on
+    /// or an angle-bracketed ID String ("\<ID\>") or a breakend replacement string as described in the section on
     /// breakends. The '*' allele is reserved to indicate that the allele is missing due to a upstream deletion. If there
     /// are no alternative alleles, then the missing value should be used. Tools processing VCF files are not required
     /// to preserve case in the allele String, except for IDs, which are case sensitive. (String; no whitespace, commas,
@@ -144,7 +144,7 @@ pub struct VcfParseResult {
 
     /// INFO - additional information: (String, no whitespace, semicolons, or equals-signs permitted; commas are
     /// permitted only as delimiters for lists of values) INFO fields are encoded as a semicolon-separated series of short
-    /// keys with optional values in the format: <key>=<data>[,data]. If no keys are present, the missing value must
+    /// keys with optional values in the format: \<key\>=\<data\>\[,data\]. If no keys are present, the missing value must
     /// be used. Arbitrary keys are permitted, although the following sub-fields are reserved (albeit optional):
     /// - AA: ancestral allele
     /// - AC: allele count in genotypes, for each ALT allele, in the same order as listed
