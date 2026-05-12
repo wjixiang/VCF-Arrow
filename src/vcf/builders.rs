@@ -5,8 +5,8 @@ use std::collections::HashMap;
 
 use arrow::array::{ArrayRef, Float32Builder, Int32Builder, StringBuilder};
 
-use crate::error::VcfError;
 use super::types::{FormatDef, VcfSample};
+use crate::error::VcfError;
 
 pub trait DynamicBuilder {
     fn append_from_str(&mut self, value: &str) -> Result<(), VcfError>;
@@ -106,14 +106,14 @@ impl VcfSampleFrameBuilder {
     }
 }
 
-pub fn build_samples(builder_map: &mut HashMap<String, VcfSampleBuilder>) -> Result<Vec<VcfSample>, VcfError> {
-    builder_map
-        .iter_mut()
-        .map(|(_index, builder)| {
-            Ok(VcfSample {
-                array: builder.arrow_builder.build()?,
-                format_def: builder.format_def.clone(),
-            })
-        })
-        .collect::<Result<Vec<VcfSample>, VcfError>>()
+pub fn build_samples(
+    builder_map: &mut HashMap<String, VcfSampleBuilder>,
+) -> Result<HashMap<String, ArrayRef>, VcfError> {
+    let mut res_map: HashMap<String, ArrayRef> = HashMap::new();
+    for (index, builder) in builder_map {
+        let array = builder.arrow_builder.build()?;
+        res_map.insert(index.clone(), array);
+    }
+
+    Ok(res_map)
 }

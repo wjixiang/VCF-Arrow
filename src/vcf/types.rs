@@ -77,6 +77,8 @@ impl FormatDef {
     }
 }
 
+use std::collections::HashMap;
+
 use arrow::array::ArrayRef;
 
 #[derive(Debug)]
@@ -166,5 +168,5 @@ pub struct VcfParseResult {
     /// - VALIDATED: validated by follow-up experiment
     /// - 1000G: membership in 1000 Genomes
     pub info: ArrayRef,
-    pub samples: Vec<VcfSample>,
+    pub samples: HashMap<String, ArrayRef>,
 }
