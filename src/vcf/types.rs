@@ -1,38 +1,45 @@
-//! VCF data types
-//! This module use [ Variant Call Format(VCF) Version 4.2 Specification ](https://samtools.github.io/hts-specs/VCFv4.2.pdf) as standard reference
+//! VCF data types.
+//!
+//! This module defines the core data structures used to represent VCF metadata and
+//! parsed results. It includes types for contigs, format definitions, info definitions,
+//! and the final VCF-to-Arrow conversion result.
+//!
+//! ## Specification Reference
+//!
+//! This module follows the [Variant Call Format (VCF) Version 4.2 Specification](https://samtools.github.io/hts-specs/VCFv4.2.pdf).
 
+use std::collections::HashMap;
+
+use arrow::array::ArrayRef;
+
+/// Represents a contig definition from the VCF header.
+///
+/// Contigs define the reference sequences (chromosomes) used in the VCF file.
+/// Each contig has an ID, optional length, and optional assembly identifier.
 #[derive(Debug, Default)]
 pub struct Contig {
+    /// Contig identifier (e.g., "chr1", "1", "MT")
     pub id: String,
+
+    /// Length of the contig in bases (optional)
     pub length: Option<u64>,
+
+    /// Assembly identifier (optional)
     pub assembly: Option<String>,
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct FormatDef {
-    pub id: String,
-    pub number: String,
-    pub type_: String,
-    pub description: String,
-}
-
-#[derive(Debug, Default)]
-pub struct InfoDef {
-    pub id: String,
-    pub number: String,
-    pub type_: String,
-    pub description: String,
-}
-
-#[derive(Debug, Default)]
-pub struct VcfMeta {
-    pub contigs: Vec<Contig>,
-    pub formats: Vec<FormatDef>,
-    pub infos: Vec<InfoDef>,
-    pub samples: Vec<String>,
-}
-
 impl Contig {
+    /// Parses a contig line from the VCF meta section.
+    ///
+    /// Expects a line in the format: `##contig=<ID=chr1,length=249250621,assembly=GRCh37>`
+    ///
+    /// # Arguments
+    ///
+    /// * `line` - A line starting with `##contig=`
+    ///
+    /// # Returns
+    ///
+    /// Returns `Some(Contig)` if parsing succeeded, or `None` if the line format was invalid.
     pub fn parse(line: &str) -> Option<Self> {
         let content = line
             .strip_prefix("##contig=")?
@@ -54,7 +61,37 @@ impl Contig {
     }
 }
 
+/// Represents a FORMAT field definition from the VCF header.
+///
+/// FORMAT fields define the structure of genotype data for each sample.
+/// Common FORMAT fields include GT (genotype), DP (depth), GQ (genotype quality), etc.
+#[derive(Debug, Clone, Default)]
+pub struct FormatDef {
+    /// Format field identifier (e.g., "GT", "DP", "GQ")
+    pub id: String,
+
+    /// Number of values (can be a number or "G", "R", "A" per VCF spec)
+    pub number: String,
+
+    /// Data type (e.g., "String", "Integer", "Float")
+    pub type_: String,
+
+    /// Human-readable description of the field
+    pub description: String,
+}
+
 impl FormatDef {
+    /// Parses a FORMAT definition line from the VCF meta section.
+    ///
+    /// Expects a line in the format: `##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">`
+    ///
+    /// # Arguments
+    ///
+    /// * `line` - A line starting with `##FORMAT=`
+    ///
+    /// # Returns
+    ///
+    /// Returns `Some(FormatDef)` if parsing succeeded, or `None` if the line format was invalid.
     pub fn parse(line: &str) -> Option<Self> {
         let content = line
             .strip_prefix("##FORMAT=")?
@@ -77,96 +114,194 @@ impl FormatDef {
     }
 }
 
-use std::collections::HashMap;
+/// Represents an INFO field definition from the VCF header.
+///
+/// INFO fields provide additional metadata about variants.
+/// Common INFO fields include DP (depth), AF (allele frequency), ANN (annotations), etc.
+#[derive(Debug, Default)]
+pub struct InfoDef {
+    /// Info field identifier
+    pub id: String,
 
-use arrow::array::ArrayRef;
+    /// Number of values
+    pub number: String,
 
+    /// Data type
+    pub type_: String,
+
+    /// Human-readable description
+    pub description: String,
+}
+
+/// VCF metadata container.
+///
+/// Holds all meta information parsed from the VCF header, including
+/// contig definitions, FORMAT definitions, INFO definitions, and sample names.
+#[derive(Debug, Default)]
+pub struct VcfMeta {
+    /// Contig definitions from the header
+    pub contigs: Vec<Contig>,
+
+    /// FORMAT field definitions
+    pub formats: Vec<FormatDef>,
+
+    /// INFO field definitions
+    pub infos: Vec<InfoDef>,
+
+    /// Sample names from the header line
+    pub samples: Vec<String>,
+}
+
+/// Represents a single sample's data array with its format definition.
+///
+/// This pairs a format definition (e.g., GT, DP) with the corresponding
+/// Arrow array containing the sample data for that format field.
 #[derive(Debug)]
 pub struct VcfSample {
+    /// The format definition for this sample data
     pub format_def: FormatDef,
+
+    /// The Arrow array containing sample values
     pub array: ArrayRef,
 }
 
-/// VCF-to-Arrow conversion result struct
+/// VCF-to-Arrow conversion result.
+///
+/// This is the primary output structure from `VcfReader::parse_into_arrow()`.
+/// It contains all standard VCF columns as Arrow arrays, metadata, and
+/// sample-specific data.
+///
+/// # Standard Columns
+///
+/// The first 8 columns follow the VCF specification:
+///
+/// | Field | Type | Description |
+/// |-------|------|-------------|
+/// | chrom | String | Chromosome/contig identifier |
+/// | pos | Int64 | 1-based position |
+/// | id | String | Variant identifier(s) |
+/// | ref | String | Reference allele |
+/// | alt | String | Alternate allele(s) |
+/// | qual | String | Phred-scaled quality score |
+/// | filter | String | Filter status |
+/// | info | String | Additional information |
+///
+/// # Sample Data
+///
+/// Sample-specific data is stored in the `samples` HashMap, keyed by FORMAT ID.
+/// For example, if the VCF contains `##FORMAT=<ID=GT,...>` and `##FORMAT=<ID=DP,...>`,
+/// the samples map will contain entries for "GT" and "DP".
 #[derive(Debug)]
 pub struct VcfParseResult {
+    /// VCF metadata (contigs, formats, samples)
     pub meta: VcfMeta,
 
-    /// CHROM - chromosome: An identifier from the reference genome or an angle-bracketed ID String ("\<ID\>")
-    /// pointing to a contig in the assembly file (cf. the ##assembly line in the header). All entries for a specific
+    /// CHROM - chromosome identifier.
+    ///
+    /// An identifier from the reference genome or an angle-bracketed ID String ("\<ID\>")
+    /// pointing to a contig in the assembly file. All entries for a specific
     /// CHROM should form a contiguous block within the VCF file.
     ///
     /// (String, no whitespace permitted, Required).
     pub chrom: ArrayRef,
 
-    /// POS - position: The reference position, with the 1st base having position 1. Positions are sorted numerically,
-    /// in increasing order, within each reference sequence CHROM. It is permitted to have multiple records with the same POS.
-    /// Telomeres are indicated by using positions 0 or N+1, where N is the length of the correspondin chromosome or contig.
+    /// POS - reference position.
+    ///
+    /// The reference position, with the 1st base having position 1. Positions are sorted numerically,
+    /// in increasing order, within each reference sequence CHROM. It is permitted to have multiple
+    /// records with the same POS. Telomeres are indicated by using positions 0 or N+1, where N is
+    /// the length of the corresponding chromosome or contig.
     ///
     /// (Integer, Required)
     pub pos: ArrayRef,
 
-    /// ID - identifier: Semicolon-separated list of unique identifiers where available. If this is a dbSNP variant it is
-    /// encouraged to use the rs number(s). No identifier should be present in more than one data record. If there is
-    /// no identifier available, then the missing value should be used. (String, no whitespace or semicolons permitted)
+    /// ID - variant identifier.
+    ///
+    /// Semicolon-separated list of unique identifiers where available. If this is a dbSNP variant
+    /// it is encouraged to use the rs number(s). No identifier should be present in more than one
+    /// data record. If there is no identifier available, then the missing value should be used.
+    ///
+    /// (String, no whitespace or semicolons permitted)
     pub id: ArrayRef,
 
-    /// REF - reference base(s): Each base must be one of A,C,G,T,N (case insensitive). Multiple bases are permitted.
-    /// The value in the POS field refers to the position of the first base in the String. For simple insertions and
-    /// deletions in which either the REF or one of the ALT alleles would otherwise be null/empty, the REF and ALT
-    /// Strings must include the base before the event (which must be reflected in the POS field), unless the event
-    /// occurs at position 1 on the contig in which case it must include the base after the event; this padding base is
-    /// not required (although it is permitted) for e.g. complex substitutions or other events where all alleles have at
-    /// least one base represented in their Strings. If any of the ALT alleles is a symbolic allele (an angle-bracketed
-    /// ID String ("\<ID\>") then the padding base is required and POS denotes the coordinate of the base preceding
-    /// the polymorphism. Tools processing VCF files are not required to preserve case in the allele Strings. (String,
-    /// Required).
+    /// REF - reference allele.
+    ///
+    /// Each base must be one of A,C,G,T,N (case insensitive). Multiple bases are permitted.
+    /// The value in the POS field refers to the position of the first base in the String.
+    /// For simple insertions and deletions in which either the REF or one of the ALT alleles
+    /// would otherwise be null/empty, the REF and ALT Strings must include the base before the
+    /// event (which must be reflected in the POS field).
+    ///
+    /// (String, Required)
     pub _ref: ArrayRef,
 
-    /// ALT - alternate base(s): Comma separated list of alternate non-reference alleles. These alleles do not have to
-    /// be called in any of the samples. Options are base Strings made up of the bases A,C,G,T,N,*, (case insensitive)
-    /// or an angle-bracketed ID String ("\<ID\>") or a breakend replacement string as described in the section on
-    /// breakends. The '*' allele is reserved to indicate that the allele is missing due to a upstream deletion. If there
-    /// are no alternative alleles, then the missing value should be used. Tools processing VCF files are not required
-    /// to preserve case in the allele String, except for IDs, which are case sensitive. (String; no whitespace, commas,
-    /// or angle-brackets are permitted in the ID String itself)
+    /// ALT - alternate allele(s).
+    ///
+    /// Comma separated list of alternate non-reference alleles. These alleles do not have to
+    /// be called in any of the samples. Options are base Strings made up of the bases A,C,G,T,N,
+    /// *, (case insensitive) or an angle-bracketed ID String ("\<ID\>") or a breakend replacement
+    /// string. The '*' allele is reserved to indicate that the allele is missing due to a upstream
+    /// deletion. If there are no alternative alleles, then the missing value should be used.
+    ///
+    /// (String; no whitespace, commas, or angle-brackets are permitted in the ID String itself)
     pub alt: ArrayRef,
 
-    /// QUAL - quality: Phred-scaled quality score for the assertion made in ALT. i.e. −10log10 prob(call in ALT is
-    /// wrong). If ALT is '.' (no variant) then this is −10log10 prob(variant), and if ALT is not '.' this is −10log10
-    /// prob(no variant). If unknown, the missing value should be specified. (Numeric)
+    /// QUAL - quality score.
+    ///
+    /// Phred-scaled quality score for the assertion made in ALT. i.e. −10log10 prob(call in ALT
+    /// is wrong). If ALT is '.' (no variant) then this is −10log10 prob(variant), and if ALT is
+    /// not '.' this is −10log10 prob(no variant). If unknown, the missing value should be specified.
+    ///
+    /// (Numeric)
     pub qual: ArrayRef,
 
-    /// FILTER - filter status: PASS if this position has passed all filters, i.e., a call is made at this position. Otherwise,
-    /// if the site has not passed all filters, then a semicolon-separated list of codes for filters that fail. e.g. "q10;s50" might
-    /// indicate that at this site the quality is below 10 and the number of samples with data is below 50% of the total
-    /// number of samples. '0' is reserved and should not be used as a filter String. If filters have not been applied,
-    /// then this field should be set to the missing value. (String, no whitespace or semicolons permitted)
+    /// FILTER - filter status.
+    ///
+    /// PASS if this position has passed all filters, i.e., a call is made at this position.
+    /// Otherwise, if the site has not passed all filters, then a semicolon-separated list of
+    /// codes for filters that fail. e.g. "q10;s50" might indicate that at this site the quality
+    /// is below 10 and the number of samples with data is below 50% of the total number of samples.
+    /// If filters have not been applied, then this field should be set to the missing value.
+    ///
+    /// (String, no whitespace or semicolons permitted)
     pub filter: ArrayRef,
 
-    /// INFO - additional information: (String, no whitespace, semicolons, or equals-signs permitted; commas are
-    /// permitted only as delimiters for lists of values) INFO fields are encoded as a semicolon-separated series of short
-    /// keys with optional values in the format: \<key\>=\<data\>\[,data\]. If no keys are present, the missing value must
-    /// be used. Arbitrary keys are permitted, although the following sub-fields are reserved (albeit optional):
+    /// INFO - additional information.
+    ///
+    /// INFO fields are encoded as a semicolon-separated series of short keys with optional values
+    /// in the format: \<key\>=\<data\>\[,data\]. If no keys are present, the missing value must
+    /// be used. Arbitrary keys are permitted, although the following sub-fields are reserved:
+    ///
     /// - AA: ancestral allele
-    /// - AC: allele count in genotypes, for each ALT allele, in the same order as listed
-    /// - AF: allele frequency for each ALT allele in the same order as listed: use this when estimated from primary
-    ///   data, not called genotypes
+    /// - AC: allele count in genotypes, for each ALT allele
+    /// - AF: allele frequency for each ALT allele
     /// - AN: total number of alleles in called genotypes
-    /// - BQ: RMS base quality at this position
-    /// - CIGAR: cigar string describing how to align an alternate allele to the reference allele
-    /// - DB: dbSNP membership
-    /// - DP: combined depth across samples, e.g. DP=154
-    /// - END: end position of the variant described in this record (for use with symbolic alleles)
-    /// - H2: membership in hapmap2
-    /// - H3: membership in hapmap3
-    /// - MQ: RMS mapping quality, e.g. MQ=52
-    /// - MQ0: Number of MAPQ == 0 reads covering this record
+    /// - DP: combined depth across samples
+    /// - MQ: RMS mapping quality
     /// - NS: Number of samples with data
-    /// - SB: strand bias at this position
-    /// - SOMATIC: indicates that the record is a somatic mutation, for cancer genomics
-    /// - VALIDATED: validated by follow-up experiment
-    /// - 1000G: membership in 1000 Genomes
+    /// - SOD: strand bias
+    ///
+    /// (String, no whitespace, semicolons, or equals-signs permitted)
     pub info: ArrayRef,
+
+    /// Sample data as a map of FORMAT ID to Arrow arrays.
+    ///
+    /// Each key corresponds to a FORMAT field ID (e.g., "GT", "DP", "GQ"),
+    /// and the value is an Arrow array containing the data for all samples
+    /// for that format field.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// // Access genotype data
+    /// if let Some(gt_array) = result.samples.get("GT") {
+    ///     // Process genotype data
+    /// }
+    ///
+    /// // Access depth data
+    /// if let Some(dp_array) = result.samples.get("DP") {
+    ///     // Process depth data
+    /// }
+    /// ```
     pub samples: HashMap<String, ArrayRef>,
 }
